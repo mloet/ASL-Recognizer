@@ -30,14 +30,6 @@ while True:
 
   if landmarks:
     for lm in landmarks:
-      # mp_drawing.draw_landmarks(
-      #   frame,
-      #   lm,
-      #   mp_hands.HAND_CONNECTIONS,
-      #   mp_drawing_styles.get_default_hand_landmarks_style(),
-      #   mp_drawing_styles.get_default_hand_connections_style()
-      # )
-
       for point in lm.landmark:
         x = int(point.x * W)
         y = int(point.y * H)
@@ -48,22 +40,13 @@ while True:
     max_x = max(x_vals) + 20 
     min_y = min(y_vals) - 20 if min(y_vals) - 20 >= 0 else 0
     max_y = max(y_vals) + 20
-    # print(f"x max = {max_x}\nx min = {min_x}\ny max = {max_y}\ny min = {min_y}")
 
 
     hand_frame = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)[min_y:max_y, min_x:max_x],(28,28))
        
-    # pixel_list = []
-    # n, m = hand_frame.shape
-    # for i in range(n): 
-    #   for j in range(m):
-    #     pixel_list.append(frame[i,j])
-    
-    # img = (np.array(pixel_list)/255).reshape(-1, 28, 28, 1)
     img = (hand_frame/255).reshape(-1, 28, 28, 1)
     prediction = model.predict(img, verbose = 0)
-    # predicted_letter =  label_map[np.argmax(prediction[0])]
-    predicted_letters =  np.argsort(prediction[0])
+    predicted_letters =  np.flip(np.argsort(prediction[0]))
 
     cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 0, 0), 4)
     cv2.putText(frame, label_map[predicted_letters[0]], (min_x, min_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.3, (0, 0, 0), 3, cv2.LINE_AA)
