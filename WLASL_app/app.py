@@ -119,7 +119,7 @@ def from_recording(model, labels):
       if(p1[0,0].item()>threshold):
         i = i+end1
         word = labels[k1[0,0].item()]
-    if end2 > 10 and word != '':
+    if end2 > 10 and word == '':
       chunk2 = video[:, :, i:i+end2, :, :]
       per_frame_logits2 = model(chunk2)
       predictions2 = torch.max(per_frame_logits2, dim=2)[0]
@@ -158,7 +158,7 @@ def from_video(vid_path, model, labels):
       if(p1[0,0].item()>threshold):
         i = i+end1
         word = labels[k1[0,0].item()]
-    if end2 > 10 and word != '':
+    if end2 > 10 and word == '':
       chunk2 = video[:, :, i:i+end2, :, :]
       per_frame_logits2 = model(chunk2)
       predictions2 = torch.max(per_frame_logits2, dim=2)[0]
@@ -211,11 +211,11 @@ if __name__ == '__main__':
     while True:
       vid_path = input('\nPlease enter path to desired mp4 file, or \'quit\': ')
       if os.path.exists(vid_path):
-        print(vid_path)
+        sentence = from_video(vid_path, i3d, labels)
         break
       elif vid_path == 'quit':
         break
-    sentence = from_video(vid_path, i3d, labels)
+    
   elif mode == 'record':
     print('Press space to start/stop recording, and \'q\' to quit')
     sentence = from_recording(i3d, labels)
