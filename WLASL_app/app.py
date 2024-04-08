@@ -6,6 +6,7 @@ import time
 import mediapipe as mp
 import torch
 from torchvision import transforms
+from tgcn_model import GCN_muti_att
 from pytorch_i3d import InceptionI3d
 
 def vid_to_tensor(video_path, start=0, num=-1):
@@ -29,41 +30,65 @@ def vid_to_tensor(video_path, start=0, num=-1):
   
   return torch.from_numpy(np.expand_dims(np.asarray(frames, dtype=np.float32).transpose([1, 0, 2, 3]), axis = 0))
 
+def midpoint(p1, p2):
+  return np.array([(p1[0]+p2[0])/2, (p1[1]+p2[1])/2])
+
+def extract_keypoints(results):
+  pose = np.array([[landmark.x, landmark.y] for landmark in results.pose_landmarks.landmark]) if results.pose_landmarks else np.zeros((33,2))
+  neck = midpoint(pose[11], pose[12])
+  hips = midpoint(pose[23], pose[24])
+  pose = np.append(pose, np.array([neck, hips]), axis = 0)[[0, 33, 12, 14, 16, 11, 13, 15, 34, 5, 2, 8, 7], :]
+  for i, point in enumerate(pose):
+    if any(x > 1 or x < 0 for x in point):
+      pose[i] = [0, 0]
+  lh = np.array([[landmark.x, landmark.y] for landmark in results.left_hand_landmarks.landmark]) if results.left_hand_landmarks else np.zeros((21,2))
+  rh = np.array([[landmark.x, landmark.y] for landmark in results.right_hand_landmarks.landmark]) if results.right_hand_landmarks else np.zeros((21,2))
+
+  return torch.FloatTensor((np.concatenate([pose, lh, rh])-0.5)*2)
+
 def from_stream(model, labels):
   sequence = []
   sentence = []
-  threshold = 0.05
-  spacer = 0
+  threshold = 0.4
+  mp_holistic = mp.solutions.holistic 
   cap = cv2.VideoCapture(0)
-  
-  while cap.isOpened():
-    success, frame = cap.read()
-    
-    img = frame
-    w, h, c = img.shape
-    sc = 224 / w
-    img = cv2.resize(img, dsize=(0, 0), fx=sc, fy=sc)
-    img = (img / 255.) * 2 - 1
-    img = transforms.CenterCrop(224)(torch.Tensor(img.transpose([2, 0, 1])))
-    sequence.append(img)
-    sequence = sequence[-60:]
-    spacer = (spacer + 1)%5
+  with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
+    while cap.isOpened():
+      success, frame = cap.read()
+      
+      image = frame
+      w, h, c = image.shape
 
-    if len(sequence) == 60 and spacer == 0:
-      input = torch.from_numpy(np.expand_dims(np.asarray(sequence, dtype=np.float32).transpose([1, 0, 2, 3]), axis = 0))
-      per_frame_logits = model(input)
-      predictions = torch.max(per_frame_logits, dim=2)[0]
-      p, k = torch.nn.functional.softmax(predictions, dim = 1).topk(1, dim = 1)
-      if(p[0,0].item()>threshold):
-        sentence.append(labels[k[0,0].item()])
+      image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+      image.flags.writeable = False                  
+      results = holistic.process(image)                 
+      image.flags.writeable = True                   
+      image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) 
 
-    cv2.rectangle(frame, (0,0), (640, 40), (245, 117, 16), -1)
-    cv2.putText(frame, ' '.join(sentence), (3,30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-    cv2.imshow('OpenCV Feed', frame)
+      keypoints = extract_keypoints(results)
+      sequence.append(keypoints)
+      sequence = sequence[-50:]
+      
+      if len(sequence) == 50:
+        input = torch.cat(sequence,  dim = 1).unsqueeze(0)
+        per_frame_logits = model(input)
+        p, k  = torch.nn.functional.softmax(per_frame_logits, dim = 1).topk(1, dim = 1)
+        if p[0,0].item()>threshold: 
+          if len(sentence) > 0: 
+            if labels[k[0,0].item()] != sentence[-1]:
+              sentence.append(labels[k[0,0].item()])
+          else:
+            sentence.append(labels[k[0,0].item()])
+          if len(sentence) > 5: 
+            sentence = sentence[-5:]
 
-    key = cv2.waitKey(10)
-    if key & 0xFF == ord('q'):
-      break
+      cv2.rectangle(image, (0,0), (640, 40), (0, 0, 0), -1)
+      cv2.putText(image, ' '.join(sentence), (3,30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+      cv2.imshow('OpenCV Feed', image)
+
+      key = cv2.waitKey(10)
+      if key & 0xFF == ord('q'):
+        break
   cap.release()
   cv2.destroyAllWindows()
   return sentence
@@ -201,12 +226,16 @@ if __name__ == '__main__':
   i3d.replace_logits(vocab)
   i3d.load_state_dict(torch.load(weights, map_location=torch.device('cpu'))) 
   i3d.eval()
+
+  tgcn = GCN_muti_att(input_feature=100, hidden_feature=256, num_class=2000, p_dropout=0.3, num_stage=24)
+  tgcn.load_state_dict(torch.load(os.path.join('model', '2000gcn.pth'), map_location=torch.device('cpu')))
+  tgcn.eval()
   with open('labels.txt', 'r') as file:
     labels = list(map(str.strip, file.readlines()))
   
   if mode == 'stream':
     print('Press \'q\' to quit')
-    sentence = from_stream(i3d, labels)
+    sentence = from_stream(tgcn, labels)
   elif mode == 'video':
     while True:
       vid_path = input('\nPlease enter path to desired mp4 file, or \'quit\': ')
