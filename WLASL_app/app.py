@@ -1,6 +1,6 @@
 import os
 import torch
-from tgcn_model import GCN_muti_att
+from slgcn_model import GCN_muti_att
 from pytorch_i3d import InceptionI3d
 from stream import from_stream
 from record import from_recording

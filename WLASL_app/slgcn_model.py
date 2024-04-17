@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import print_function
 
@@ -13,10 +11,6 @@ import numpy as np
 
 
 class GraphConvolution_att(nn.Module):
-    """
-    Simple GCN layer, similar to https://arxiv.org/abs/1609.02907
-    """
-
     def __init__(self, in_features, out_features, bias=True, init_A=0):
         super(GraphConvolution_att, self).__init__()
         self.in_features = in_features
@@ -51,9 +45,6 @@ class GraphConvolution_att(nn.Module):
                + str(self.out_features) + ')'
     
 class GraphConvolution_flex_att(nn.Module):
-    """
-    Simple GCN layer, similar to https://arxiv.org/abs/1609.02907
-    """
 
     def __init__(self, in_features, out_features, kpin = 55, kpout = 55, bias=True, init_A=0):
         super(GraphConvolution_att, self).__init__()
@@ -165,12 +156,3 @@ class GCN_muti_att(nn.Module):
         out = self.fc_out(out)
 
         return out
-
-
-if __name__ == '__main__':
-    num_samples = 32
-
-    model = GCN_muti_att(input_feature=num_samples*2, hidden_feature=256,
-                         num_class=100, p_dropout=0.3, num_stage=2)
-    x = torch.ones([2, 55, num_samples*2])
-    print(model(x).size())
